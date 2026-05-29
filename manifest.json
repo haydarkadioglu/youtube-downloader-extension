@@ -1,18 +1,19 @@
 {
   "manifest_version": 3,
   "name": "YouTube Downloader",
-  "version": "2.0",
-  "description": "Download YouTube videos as MP4 or MP3 - no server needed",
+  "version": "3.0",
+  "description": "Download YouTube videos as MP4 or MP3 via native messaging (yt-dlp)",
   "permissions": [
     "storage",
     "downloads",
-    "notifications"
+    "notifications",
+    "nativeMessaging",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://www.youtube.com/*",
-    "https://www.youtubepp.com/*",
-    "https://yt-downloader-api.vercel.app/*",
-    "https://*.googlevideo.com/*"
+    "https://youtu.be/*",
+    "https://www.youtube-nocookie.com/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
@@ -29,6 +30,7 @@
     "type": "module"
   },
   "icons": {
+    "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   }
 }

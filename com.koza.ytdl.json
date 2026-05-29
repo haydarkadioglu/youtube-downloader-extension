@@ -1,0 +1,12 @@
+{
+  "name": "com.koza.ytdl",
+  "description": "YouTube Downloader Native Host — bridges Chrome to yt-dlp",
+  "path": "/root/.Koza/workspace/projects/youtube-downloader-extension/native_host.py",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://__MSG_@@extension_id__/"
+  ],
+  "allowed_extensions": [
+    "com.koza.ytdl"
+  ]
+}

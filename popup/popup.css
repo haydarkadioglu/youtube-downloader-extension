@@ -1,35 +1,87 @@
-/* YouTube Downloader Popup Styles */
+/* YouTube Downloader Popup v3 */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  width: 320px;
+  width: 340px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #1a1a2e;
   color: #eee;
 }
 
-.container { padding: 16px; }
+.container { padding: 14px; }
 
-.header { text-align: center; margin-bottom: 16px; }
+/* Header */
+.header { text-align: center; margin-bottom: 12px; }
 .header h1 { font-size: 18px; background: linear-gradient(135deg, #ff4444, #ff6b6b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+.subtitle { font-size: 11px; color: #888; margin-top: 2px; }
 
+/* Native Status */
+.native-status {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  text-align: center;
+  display: none;
+}
+.native-status.connected {
+  display: block;
+  background: rgba(76,175,80,0.12);
+  color: #4caf50;
+  border: 1px solid rgba(76,175,80,0.2);
+}
+.native-status.disconnected {
+  display: block;
+  background: rgba(255,152,0,0.12);
+  color: #ff9800;
+  border: 1px solid rgba(255,152,0,0.2);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Video Info */
 .video-info {
   background: rgba(255,255,255,0.05);
   border-radius: 10px;
   padding: 10px 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   border: 1px solid rgba(255,255,255,0.08);
 }
-.video-title { font-size: 13px; line-height: 1.4; word-break: break-word; }
+.video-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.video-title {
+  font-size: 13px;
+  line-height: 1.4;
+  word-break: break-word;
+  flex: 1;
+}
+.icon-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.icon-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+}
 .playlist-badge { font-size: 11px; color: #ff6b6b; margin-top: 4px; }
 
-.format-selector { display: flex; gap: 8px; margin-bottom: 14px; }
+/* Format Selector */
+.format-selector { display: flex; gap: 8px; margin-bottom: 12px; }
 .format-option { flex: 1; }
 .format-option input { display: none; }
 .format-card {
   display: flex; flex-direction: column; align-items: center;
-  padding: 12px; border-radius: 10px;
+  padding: 10px 8px; border-radius: 10px;
   border: 2px solid rgba(255,255,255,0.1);
   cursor: pointer; transition: all 0.2s;
   text-align: center;
@@ -38,13 +90,15 @@ body {
   border-color: #ff4444;
   background: rgba(255,68,68,0.1);
 }
-.format-icon { font-size: 24px; margin-bottom: 4px; }
+.format-card:hover { border-color: rgba(255,68,68,0.4); }
+.format-icon { font-size: 22px; margin-bottom: 3px; }
 .format-label { font-size: 13px; font-weight: 600; }
-.format-desc { font-size: 10px; color: #888; margin-top: 2px; }
+.format-desc { font-size: 10px; color: #888; margin-top: 1px; }
 
+/* Download Button */
 .download-btn {
   width: 100%;
-  padding: 12px;
+  padding: 11px;
   border: none;
   border-radius: 10px;
   background: linear-gradient(135deg, #ff4444, #cc0000);
@@ -54,16 +108,34 @@ body {
   cursor: pointer;
   transition: all 0.2s;
 }
-.download-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,0,0,0.3); }
-.download-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.download-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255,0,0,0.3);
+}
+.download-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+/* Status */
 .status {
-  margin-top: 10px;
+  margin-top: 8px;
   padding: 8px;
   border-radius: 8px;
   font-size: 12px;
   text-align: center;
   display: none;
 }
-.status.success { display: block; background: rgba(76,175,80,0.15); color: #4caf50; }
-.status.error { display: block; background: rgba(244,67,54,0.15); color: #ff5252; }
+.status.info { display: block; background: rgba(33,150,243,0.12); color: #64b5f6; }
+.status.success { display: block; background: rgba(76,175,80,0.12); color: #4caf50; }
+.status.error { display: block; background: rgba(244,67,54,0.12); color: #ff5252; }
+
+/* Footer */
+.footer {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 10px;
+  color: #555;
+}
+.footer a {
+  color: #ff6b6b;
+  text-decoration: none;
+}
+.footer a:hover { text-decoration: underline; }

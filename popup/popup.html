@@ -9,12 +9,17 @@
   <div class="container">
     <div class="header">
       <h1>🎬 YouTube Downloader</h1>
-      <p class="subtitle">Download videos &amp; playlists</p>
+      <p class="subtitle">Powered by yt-dlp (native)</p>
     </div>
 
+    <div id="native-status" class="native-status"></div>
+
     <div id="video-info" class="video-info" style="display:none;">
-      <p id="video-title" class="video-title"></p>
-      <p id="playlist-badge" class="playlist-badge" style="display:none;">📋 Playlist</p>
+      <div class="video-row">
+        <p id="video-title" class="video-title"></p>
+        <button id="refresh-btn" class="icon-btn" title="Refresh">🔄</button>
+      </div>
+      <p id="playlist-badge" class="playlist-badge" style="display:none;">📋 Playlist detected</p>
     </div>
 
     <div class="format-selector">
@@ -23,7 +28,7 @@
         <div class="format-card">
           <span class="format-icon">🎬</span>
           <span class="format-label">MP4 Video</span>
-          <span class="format-desc">Best quality video</span>
+          <span class="format-desc">Best quality</span>
         </div>
       </label>
       <label class="format-option">
@@ -31,13 +36,18 @@
         <div class="format-card">
           <span class="format-icon">🎵</span>
           <span class="format-label">MP3 Audio</span>
-          <span class="format-desc">Extract audio only</span>
+          <span class="format-desc">Extract audio</span>
         </div>
       </label>
     </div>
 
     <button id="download-btn" class="download-btn">⬇️ Download</button>
     <div id="status" class="status"></div>
+    
+    <div class="footer">
+      <span>Need yt-dlp?</span>
+      <a id="setup-link" href="#">Setup Guide</a>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>

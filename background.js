@@ -1,157 +1,291 @@
-// YouTube Downloader Extension v2 - Pure JS, No Server Needed
-// Uses free API proxies to get video URLs, then downloads directly
+// YouTube Downloader — Native Messaging Background v3
+// This is the bridge between the popup/content scripts and yt-dlp via native host
 
-const API_BASE = 'https://yt-downloader-api.vercel.app';
+const NATIVE_HOST = 'com.koza.ytdl';
+let nativePort = null;
 
-// Detect video URL from YouTube page
-async function getVideoInfo(videoUrl) {
-  const videoId = extractVideoId(videoUrl);
-  if (!videoId) throw new Error('Invalid YouTube URL');
-  
-  // Try to get direct video URL via info API
+// ===== NATIVE HOST CONNECTION =====
+
+function connectNative() {
   try {
-    const res = await fetch(`${API_BASE}/api/info?url=${encodeURIComponent(videoUrl)}`);
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
+    nativePort = chrome.runtime.connectNative(NATIVE_HOST);
+    
+    nativePort.onMessage.addListener((msg) => {
+      console.log('[Native] Received:', msg);
+      
+      // Forward to the sender
+      if (pendingCallbacks[msg.id]) {
+        pendingCallbacks[msg.id](msg);
+        delete pendingCallbacks[msg.id];
+      }
+    });
+
+    nativePort.onDisconnect.addListener(() => {
+      const err = chrome.runtime.lastError;
+      console.log('[Native] Disconnected:', err?.message || 'no error');
+      nativePort = null;
+      
+      // Reject all pending
+      for (const id in pendingCallbacks) {
+        pendingCallbacks[id]({ id, success: false, error: 'Native host disconnected: ' + (err?.message || 'unknown') });
+        delete pendingCallbacks[id];
+      }
+    });
+
+    return true;
   } catch (e) {
-    console.log('[YT DL] API unavailable, using fallback...');
+    console.error('[Native] Connection failed:', e);
+    nativePort = null;
+    return false;
   }
-  
-  // Fallback: try youtubei endpoint
-  return await getVideoInfoFromPage(videoUrl);
 }
 
-function extractVideoId(url) {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-    /^([a-zA-Z0-9_-]{11})$/
-  ];
-  
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
+function ensureNativeConnection() {
+  if (nativePort) return true;
+  return connectNative();
 }
 
-async function getVideoInfoFromPage(videoUrl) {
-  const videoId = extractVideoId(videoUrl);
-  
-  // Fetch the YouTube page and extract player response
-  const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+// ===== REQUEST/RESPONSE SYSTEM =====
+
+let msgCounter = 0;
+const pendingCallbacks = {};
+
+function sendNative(action, data = {}, timeoutMs = 60000) {
+  return new Promise((resolve) => {
+    if (!ensureNativeConnection()) {
+      resolve({ success: false, error: 'Cannot connect to native host. Is yt-dlp installed?' });
+      return;
+    }
+
+    const id = ++msgCounter;
+    const msg = { id, action, ...data };
+
+    pendingCallbacks[id] = (response) => {
+      clearTimeout(timer);
+      resolve(response);
+    };
+
+    try {
+      nativePort.postMessage(msg);
+    } catch (e) {
+      delete pendingCallbacks[id];
+      resolve({ success: false, error: 'Failed to send message: ' + e.message });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (pendingCallbacks[id]) {
+        delete pendingCallbacks[id];
+        resolve({ success: false, error: 'Request timed out after ' + (timeoutMs/1000) + 's' });
+      }
+    }, timeoutMs);
+  });
+}
+
+// ===== VIDEO INFO CACHE =====
+
+let cachedVideoInfo = null;
+
+async function fetchVideoInfo(tabId) {
+  try {
+    // Try to get info from content script first
+    if (tabId) {
+      try {
+        const results = await chrome.tabs.sendMessage(tabId, { action: 'get_video_id' });
+        if (results?.videoId) {
+          console.log('[Background] Got videoId from content:', results.videoId);
+        }
+      } catch (e) {
+        // content script not injected yet or not on YouTube
+      }
+    }
+
+    // Get info via native host (yt-dlp will extract from page)
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab?.url || !isYoutubeUrl(tab.url)) {
+      return { success: false, error: 'Not a YouTube video page' };
+    }
+
+    const result = await sendNative('get_info', { url: tab.url });
+    
+    if (result?.success && result?.data) {
+      cachedVideoInfo = result.data;
+    }
+    
+    return result;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function isYoutubeUrl(url) {
+  return url && (url.includes('youtube.com/watch') || 
+                 url.includes('youtu.be/') || 
+                 url.includes('youtube.com/shorts/'));
+}
+
+// ===== MESSAGE HANDLER =====
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Must return true for async responses
+
+  switch (request.action) {
+    
+    case 'ping':
+      // Check native host health
+      if (nativePort) {
+        sendResponse({ success: true, connected: true });
+      } else if (ensureNativeConnection()) {
+        sendResponse({ success: true, connected: true });
+      } else {
+        sendResponse({ success: false, connected: false, error: 'Native host unavailable' });
+      }
+      return false;
+
+    case 'get_info':
+      (async () => {
+        const tabId = sender?.tab?.id;
+        const result = await fetchVideoInfo(tabId);
+        
+        if (result?.success && result?.data) {
+          sendResponse({ 
+            success: true, 
+            title: result.data.title || 'Unknown',
+            duration: result.data.duration,
+            url: result.data.webpage_url
+          });
+        } else {
+          // Use cached if available
+          if (cachedVideoInfo) {
+            sendResponse({ success: true, title: cachedVideoInfo.title });
+          } else {
+            sendResponse({ success: false, error: result?.error || 'Could not fetch video info' });
+          }
+        }
+      })();
+      return true;
+
+    case 'download':
+      (async () => {
+        // Get the video URL from the active tab
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tab = tabs[0];
+        
+        if (!tab?.url || !isYoutubeUrl(tab.url)) {
+          sendResponse({ success: false, error: 'Not on a YouTube video page' });
+          return;
+        }
+
+        const format = request.format || 'mp4';
+        const quality = request.quality || (format === 'mp3' ? 'bestaudio' : 'bestvideo+bestaudio/best');
+
+        // If mp3, auto-download to a temp directory — native host handles it
+        const result = await sendNative('download', {
+          url: tab.url,
+          format: format,
+          quality: quality,
+          output_template: '%(title)s.%(ext)s'
+        });
+
+        if (result?.success) {
+          sendResponse({ 
+            success: true, 
+            filename: result.data?.filename || result.data?.title || 'video',
+            path: result.data?.path
+          });
+        } else {
+          sendResponse({ success: false, error: result?.error || 'Download failed' });
+        }
+      })();
+      return true;
+
+    case 'download_url':
+      // Direct URL download (from context menu or other sources)
+      (async () => {
+        if (!request.url || !isYoutubeUrl(request.url)) {
+          sendResponse({ success: false, error: 'Invalid YouTube URL' });
+          return;
+        }
+
+        const format = request.format || 'mp4';
+        const result = await sendNative('download', {
+          url: request.url,
+          format: format,
+          output_template: '%(title)s.%(ext)s'
+        });
+
+        sendResponse(result?.success 
+          ? { success: true, filename: result.data?.title || 'video' }
+          : { success: false, error: result?.error || 'Download failed' });
+      })();
+      return true;
+
+    default:
+      sendResponse({ success: false, error: 'Unknown action: ' + request.action });
+      return false;
+  }
+});
+
+// ===== CONTEXT MENU =====
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'download-video',
+    title: '⬇️ Download this video',
+    contexts: ['link', 'video'],
+    targetUrlPatterns: ['*://*.youtube.com/*', '*://youtu.be/*']
+  }, () => {
+    if (chrome.runtime.lastError) {
+      console.log('[ContextMenu] Error:', chrome.runtime.lastError.message);
     }
   });
   
-  const html = await res.text();
-  
-  // Extract title
-  const titleMatch = html.match(/<title>([^<]+)<\/title>/);
-  const title = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : `video_${videoId}`;
-  
-  // Extract player response
-  const ytInitialPlayerResponse = html.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-  
-  if (ytInitialPlayerResponse) {
-    const data = JSON.parse(ytInitialPlayerResponse[1]);
-    const formats = [...(data.streamingData?.formats || []), ...(data.streamingData?.adaptiveFormats || [])];
-    
-    // Find best format
-    const bestVideo = formats.filter(f => f.mimeType?.startsWith('video/mp4'))
-      .sort((a, b) => (b.width || 0) - (a.width || 0))[0];
-    
-    const bestAudio = formats.filter(f => f.mimeType?.startsWith('audio/mp4'))
-      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-    
-    return {
-      title,
-      videoId,
-      formats,
-      directUrl: bestVideo?.url || bestAudio?.url,
-      bestVideoUrl: bestVideo?.url,
-      bestAudioUrl: bestAudio?.url,
-      bestVideo,
-      bestAudio
-    };
-  }
-  
-  throw new Error('Could not extract video data');
-}
-
-// Download a video directly via browser's native download
-async function downloadDirect(url, filename, format) {
-  // For direct URLs we can use chrome.downloads.download
-  const response = await fetch(url);
-  const blob = await response.blob();
-  
-  // Create blob URL and trigger download
-  const blobUrl = URL.createObjectURL(blob);
-  
-  // Use downloads API for the blob
-  const reader = new FileReader();
-  reader.readAsDataURL(blob);
-  
-  return new Promise((resolve) => {
-    reader.onload = function() {
-      chrome.downloads.download({
-        url: reader.result,
-        filename: `${sanitizeFilename(filename)}.${format}`,
-        saveAs: false
-      }, (downloadId) => {
-        URL.revokeObjectURL(blobUrl);
-        resolve(downloadId);
-      });
-    };
+  chrome.contextMenus.create({
+    id: 'download-audio',
+    title: '🎵 Download audio only',
+    contexts: ['link', 'video'],
+    targetUrlPatterns: ['*://*.youtube.com/*', '*://youtu.be/*']
+  }, () => {
+    if (chrome.runtime.lastError) {
+      console.log('[ContextMenu] Error:', chrome.runtime.lastError.message);
+    }
   });
-}
-
-function sanitizeFilename(name) {
-  return name.replace(/[<>:"/\\|?*]/g, '_').slice(0, 200);
-}
-
-// Listen for messages from content script / popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'download') {
-    handleDownload(request.url, request.format || 'mp4')
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
-  
-  if (request.action === 'get_info') {
-    getVideoInfo(request.url)
-      .then(info => sendResponse({ success: true, ...info }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
 });
 
-async function handleDownload(url, format) {
-  const info = await getVideoInfo(url);
-  
-  if (format === 'mp3') {
-    // Best audio format
-    const audioUrl = info.bestAudioUrl || info.formats
-      .filter(f => f.mimeType?.startsWith('audio'))
-      .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0]?.url;
-    
-    if (!audioUrl) throw new Error('No audio stream found');
-    
-    return await downloadDirect(audioUrl, info.title || `video_${info.videoId}`, 'm4a');
-  } else {
-    // MP4 - best video
-    const videoUrl = info.bestVideoUrl || info.directUrl;
-    if (!videoUrl) throw new Error('No video stream found');
-    
-    return await downloadDirect(videoUrl, info.title || `video_${info.videoId}`, 'mp4');
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  const url = info.linkUrl || info.srcUrl || tab?.url;
+  if (!url || !isYoutubeUrl(url)) {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: 'YouTube Downloader',
+      message: 'Not a valid YouTube URL'
+    });
+    return;
   }
-}
 
-// Auto-cleanup
-chrome.runtime.onStartup.addListener(() => {
-  // Clean old blob URLs if any stored
-  chrome.storage.local.remove('oldDownloads');
+  const format = info.menuItemId === 'download-audio' ? 'mp3' : 'mp4';
+  
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icons/icon48.png',
+    title: 'YouTube Downloader',
+    message: `Starting ${format.toUpperCase()} download...`,
+    priority: 2
+  });
+
+  // Trigger download
+  chrome.runtime.sendMessage({
+    action: 'download_url',
+    url: url,
+    format: format
+  });
 });
+
+// ===== RECONNECT LOGIC =====
+// Periodically check native host connection
+setInterval(() => {
+  if (!nativePort) {
+    ensureNativeConnection();
+  }
+}, 30000); // Check every 30 seconds
