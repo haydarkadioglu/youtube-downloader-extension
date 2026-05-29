@@ -1,0 +1,7 @@
+{
+  "name": "com.youtube.downloader",
+  "description": "YouTube Downloader Backend",
+  "path": "server/server.py",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://__MSG_@@extension_id__/"]
+}
