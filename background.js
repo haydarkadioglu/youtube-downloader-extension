@@ -1,85 +1,141 @@
 // YouTube Video Downloader Extension - Background Script
+// Backend'i otomatik başlatır ve yönetir
 
-let serverProcess = null;
+const SERVER_URL = 'http://localhost:8888';
+const SERVER_PORT = 8888;
 
-// Check if Python is available and start server
-async function startServer() {
+// Check if server is responding
+async function isServerRunning() {
   try {
-    // Try to start the Python server bundled with the extension
-    const serverUrl = 'http://localhost:8888';
-    
-    // Check if server is already running
-    const check = await fetch(serverUrl + '/ping').catch(() => null);
-    if (check && check.ok) {
-      console.log('[YT Downloader] Server already running');
-      return;
-    }
-  } catch(e) {
-    // Server not running, we'll start it
+    const res = await fetch(`${SERVER_URL}/ping`, { signal: AbortSignal.timeout(2000) });
+    return res.ok;
+  } catch {
+    return false;
   }
+}
 
-  // Try multiple methods to start the server
-  const scripts = [
-    { cmd: 'python3', args: ['server/server.py'] },
-    { cmd: 'python', args: ['server/server.py'] }
-  ];
+// Launch Python server via native messaging host
+function launchServer() {
+  return new Promise((resolve, reject) => {
+    try {
+      // Use native messaging to talk to our host
+      const host = chrome.runtime.connectNative('com.youtube.downloader');
+      
+      host.onMessage.addListener((msg) => {
+        console.log('[YT Downloader] Native host:', msg);
+        if (msg.status === 'started') {
+          resolve(true);
+        }
+      });
+      
+      host.onDisconnect.addListener(() => {
+        const err = chrome.runtime.lastError;
+        if (err) console.warn('[YT Downloader] Native host disconnected:', err);
+        resolve(false);
+      });
+      
+      // Send start command
+      host.postMessage({ action: 'start', port: SERVER_PORT });
+      
+      // Timeout fallback
+      setTimeout(() => resolve(false), 3000);
+    } catch (e) {
+      console.warn('[YT Downloader] Native messaging unavailable:', e);
+      resolve(false);
+    }
+  });
+}
 
-  // Get extension path
-  const extensionRoot = chrome.runtime.getURL('/');
+// Fallback: try spawning via fetch to a local endpoint
+async function tryLocalSpawn() {
+  try {
+    const res = await fetch(`${SERVER_URL}/start`, { 
+      method: 'POST',
+      signal: AbortSignal.timeout(2000)
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Main startup flow
+async function startServer() {
+  console.log('[YT Downloader] Checking backend server...');
   
-  // Try using native messaging host approach - launch via fetch to local bundled server
-  // For now, show a notification if server isn't running
+  // 1. Check if already running
+  if (await isServerRunning()) {
+    console.log('[YT Downloader] Server already running');
+    return;
+  }
+  
+  console.log('[YT Downloader] Starting backend server...');
+  
+  // 2. Try native messaging first
+  const nativeResult = await launchServer();
+  if (nativeResult || await isServerRunning()) {
+    console.log('[YT Downloader] Server started via native host');
+    return;
+  }
+  
+  // 3. Wait a moment and check again
+  await new Promise(r => setTimeout(r, 2000));
+  if (await isServerRunning()) return;
+  
+  // 4. Show notification with instructions
   chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icons/icon128.png',
     title: 'YouTube Downloader',
-    message: 'Backend sunucusu başlatılıyor... Python yüklü olduğundan emin olun.',
-    priority: 2
+    message: 'Backend başlatılamadı. Terminal açıp şunu çalıştırın: python server/server.py',
+    priority: 2,
+    buttons: [{ title: 'Kurulum talimatları' }]
   });
 }
 
-// Start server on install/update
-chrome.runtime.onInstalled.addListener((details) => {
-  console.log('[YT Downloader] Extension installed:', details.reason);
-  startServer();
+// Notification click handler
+chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  if (buttonIndex === 0) {
+    chrome.tabs.create({ url: 'https://github.com/haydarkadioglu/youtube-downloader-extension#kurulum' });
+  }
 });
 
-// Also try on startup
-chrome.runtime.onStartup.addListener(() => {
-  startServer();
-});
+// Auto-start on install/update/startup
+chrome.runtime.onInstalled.addListener(() => startServer());
+chrome.runtime.onStartup.addListener(() => startServer());
 
-// Handle download requests from content scripts
+// Also try every 30s in case user starts watching later
+setInterval(async () => {
+  if (await isServerRunning()) return;
+  console.log('[YT Downloader] Retrying server start...');
+  startServer();
+}, 30000);
+
+// Handle download requests from content_script.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'download') {
-    const serverUrl = 'http://localhost:8888';
-    
-    fetch(`${serverUrl}/download`, {
+    fetch(`${SERVER_URL}/download`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: request.url,
-        format: request.format || 'mp4'
-      })
+      body: JSON.stringify({ url: request.url, format: request.format || 'mp4' })
     })
     .then(res => res.json())
     .then(data => {
       if (data.filename) {
-        // Download the file
         chrome.downloads.download({
-          url: `${serverUrl}/downloads/${data.filename}`,
+          url: `${SERVER_URL}/downloads/${data.filename}`,
           filename: data.filename,
           saveAs: false
         });
         sendResponse({ success: true, filename: data.filename });
       } else {
-        sendResponse({ success: false, error: data.error || 'Unknown error' });
+        sendResponse({ success: false, error: data.error || 'Bilinmeyen hata' });
       }
     })
-    .catch(err => {
-      sendResponse({ success: false, error: 'Backend sunucusu çalışmıyor! Önce python server/server.py komutunu çalıştırın.' });
+    .catch(() => {
+      sendResponse({ success: false, error: 'Backend çalışmıyor. Lütfen python server/server.py komutunu çalıştırın.' });
     });
-
-    return true; // Keep channel open for async response
+    
+    return true; // Keep channel open
   }
 });
