@@ -1,111 +1,36 @@
-# YouTube Video Downloader Extension
+# YouTube Downloader Extension (Pure JS)
 
-Herhangi bir YouTube videosunu **MP4 (video)** veya **MP3 (ses)** olarak tek tıkla indir.
+> **Sıfır bağımlılık.** Python, Node.js, ffmpeg gerekmez. Sadece Chrome/Chromium yeterli.
 
-## 🚀 Kurulum
+## 🚀 Özellikler
 
-### 1️⃣ Tek Komutla Otomatik Kurulum
-```bash
-git clone https://github.com/haydarkadioglu/youtube-downloader-extension.git
-cd youtube-downloader-extension
-python setup.py
-```
-Bu komut:
-- ✅ Gerekli Python paketlerini yükler (`flask`, `yt-dlp`, `flask-cors`)
-- ✅ Chrome için native messaging host'u kaydeder (backend otomatik başlasın diye)
-- ✅ Masaüstü kısayolu oluşturur
-- ✅ Backend sunucusunu başlatır
+- ⬇️ **Tek tıkla indirme** — YouTube video sayfasında direkt "Download" butonu
+- 🎬 **MP4 Video** — En iyi kalitede video indirme
+- 🎵 **MP3 Audio** — Sadece ses olarak indirme
+- 🔒 **Sunucu yok** — Tüm işlem tarayıcı içinde
+- ⚡ **Hızlı** — Background worker ile asenkron indirme
 
-### 2️⃣ Extension'ı Yükle
-1. `chrome://extensions` adresine git
-2. Sağ üstten **Geliştirici modu**'nu aç
-3. **Paketlenmemiş öğe yükle** → proje klasörünü seç
+## 📦 Kurulum
 
-### 3️⃣ Kullanmaya Başla
-YouTube'da herhangi bir videoya girdiğinde videonun altında **MP3 İndir** / **MP4 İndir** butonları belirecek. Tıkla, dosyan anında insin! 🎯
-
----
-
-## ⚡ Manuel Kurulum
-
-Eğer `setup.py` çalışmazsa:
-
-### Gereksinimler
-```bash
-pip install flask yt-dlp flask-cors
-```
-
-### Backend'i Başlat
-```bash
-cd server
-python server.py
-```
-Sunucu `http://localhost:8888` portunda çalışır.
-
-### Native Host Kaydı (Opsiyonel — Backend Otomatik Başlasın İstiyorsan)
-
-#### Windows (Yönetici olarak PowerShell):
-```powershell
-reg add "HKCU\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.youtube.downloader" /ve /t REG_SZ /d "%CD%\native-host\com.youtube.downloader.json" /f
-```
-
-#### Linux:
-```bash
-mkdir -p ~/.config/google-chrome/NativeMessagingHosts
-cp native-host/com.youtube.downloader.json ~/.config/google-chrome/NativeMessagingHosts/
-```
-
-#### macOS:
-```bash
-mkdir -p ~/"Library/Application Support/Google/Chrome/NativeMessagingHosts"
-cp native-host/com.youtube.downloader.json ~/"Library/Application Support/Google/Chrome/NativeMessagingHosts/"
-```
-
----
+1. Chrome'da `chrome://extensions/` adresine git
+2. Sağ üstten **Geliştirici Modu**'nu aç
+3. **Paketlenmemiş öğe yükle**'ye tıkla
+4. Bu klasörü seç
 
 ## 🎯 Kullanım
 
-1. **YouTube'da gezin** — ana sayfa, arama sonuçları, öneriler, videonun kendisi
-2. **İndir butonuna tıkla** — her videonun altında MP3 ve MP4 butonları var
-3. **Dosyan gelsin** — otomatik olarak bilgisayarına indirilir
+- YouTube'da herhangi bir videoya gir
+- Video başlığının altındaki kırmızı **⬇️ Download** butonuna tıkla
+- Veya extension ikonuna tıkla, format seç (MP4/MP3) ve indir
 
-## 📦 Özellikler
+## ⚙️ Nasıl Çalışır?
 
-| Özellik | Açıklama |
-|---------|----------|
-| ✅ **MP4 İndir** | Videoyu en yüksek kalitede indir |
-| ✅ **MP3 İndir** | Sadece ses olarak indir |
-| ✅ **Her yerde çalışır** | Ana sayfa, arama, öneriler, video sayfası |
-| ✅ **Otomatik başlatma** | Setup.py ile kurunca extension backend'i kendi açar |
-| ✅ **Hızlı** | Arka planda akar, gezintini engellemez |
-| ✅ **Ücretsiz** | 100% açık kaynak, reklam yok |
+1. Video sayfasından direkt stream URL'leri çekilir (YouTube'un kendi CDN'inden)
+2. Video/audio stream'i tarayıcıya indirilir
+3. Chrome'un Downloads API'si ile kaydedilir
 
-## 📁 Proje Yapısı
-```
-youtube-downloader-extension/
-├── icons/              # Extension ikonları
-├── server/             # Python backend (Flask + yt-dlp)
-│   └── server.py       # Sunucu ana dosyası
-├── native-host/        # Chrome native messaging config
-├── background.js       # Extension arkaplan işlemleri
-├── content_script.js   # YouTube sayfalarına enjekte edilen kod
-├── manifest.json       # Extension yapılandırması
-├── popup.html          # Extension popup arayüzü
-├── popup.js            # Popup mantığı
-├── styles.css          # Stil dosyası
-├── setup.py            # ⭐ Tek tıkla kurulum sihirbazı
-└── README.md           # Bu dosya
-```
+Hiçbir harici servise video gönderilmez, her şey local'de kalır.
 
-## 🐛 Sorun Giderme
+## 📝 Not
 
-| Sorun | Çözüm |
-|-------|-------|
-| ❌ Butonlar görünmüyor | YouTube sayfasını yenile (F5) |
-| ❌ "Backend çalışmıyor" hatası | `python server/server.py` çalıştır |
-| ❌ İndirme başlamıyor | Python ve yt-dlp'nin güncel olduğundan emin ol |
-| ❌ Native host hatası | `python setup.py` ile tekrar dene |
-
-## 💻 Geliştirme
-
-PR'lere ve önerilere açığım! 
+Yüksek çözünürlüklü videolar için YouTube'un login gerektiren stream'leri varsa, indirme başarısız olabilir. Bu durumda popup'tan farklı format dene.

@@ -1,5 +1,5 @@
-// YouTube Downloader - Content Script
-// Adds a download button to YouTube video & playlist pages
+// YouTube Downloader - Content Script v2
+// Injects download button on YouTube video pages
 
 let downloadBtn = null;
 
@@ -8,6 +8,7 @@ function createDownloadButton() {
 
   downloadBtn = document.createElement('button');
   downloadBtn.innerHTML = '⬇️ Download';
+  downloadBtn.id = 'koza-download-btn';
   downloadBtn.style.cssText = `
     margin-left: 8px;
     padding: 8px 16px;
@@ -20,6 +21,9 @@ function createDownloadButton() {
     font-weight: bold;
     box-shadow: 0 2px 8px rgba(255,0,0,0.3);
     transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   `;
   downloadBtn.onmouseover = () => {
     downloadBtn.style.transform = 'scale(1.05)';
@@ -32,20 +36,22 @@ function createDownloadButton() {
 
   downloadBtn.onclick = async () => {
     const url = window.location.href;
-    const isPlaylist = url.includes('list=') || url.includes('/playlist');
-
-    // Visual feedback
-    downloadBtn.innerHTML = isPlaylist ? '⏳ Downloading playlist...' : '⏳ Downloading...';
+    downloadBtn.innerHTML = '⏳ Downloading...';
     downloadBtn.disabled = true;
 
     chrome.runtime.sendMessage({
       action: 'download',
       url: url
     }, (response) => {
+      if (response && response.success) {
+        downloadBtn.innerHTML = '✅ Downloaded!';
+      } else {
+        downloadBtn.innerHTML = '❌ Failed - Click popup';
+      }
       setTimeout(() => {
-        downloadBtn.innerHTML = isPlaylist ? '📋 Download Playlist' : '⬇️ Download';
+        downloadBtn.innerHTML = '⬇️ Download';
         downloadBtn.disabled = false;
-      }, 2000);
+      }, 3000);
     });
   };
 
@@ -53,36 +59,15 @@ function createDownloadButton() {
 }
 
 function injectButton() {
-  // YouTube's action buttons area (for video pages)
   const actionsArea = document.querySelector('#top-level-buttons-computed');
   if (actionsArea && !document.querySelector('#koza-download-btn')) {
     const btn = createDownloadButton();
-    btn.id = 'koza-download-btn';
     actionsArea.appendChild(btn);
-  }
-
-  // For playlist pages - try alternate selectors
-  if (!document.querySelector('#koza-download-btn')) {
-    const secondaryArea = document.querySelector('#owner #actions');
-    if (secondaryArea && !document.querySelector('#koza-download-btn')) {
-      const btn = createDownloadButton();
-      btn.id = 'koza-download-btn';
-      btn.style.marginTop = '8px';
-      secondaryArea.appendChild(btn);
-    }
   }
 }
 
-// Watch for page navigation (SPA - YouTube changes page without reload)
-const observer = new MutationObserver(() => {
-  injectButton();
-});
+const observer = new MutationObserver(() => { injectButton(); });
+observer.observe(document.body, { childList: true, subtree: true });
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true
-});
-
-// Initial injection with delay for page load
 setTimeout(injectButton, 2000);
 setTimeout(injectButton, 4000);
