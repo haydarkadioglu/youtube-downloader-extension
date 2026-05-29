@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Downloader",
+  "version": "1.0",
+  "description": "Download YouTube videos as MP4 or MP3",
+  "permissions": ["storage", "downloads"],
+  "host_permissions": ["https://www.youtube.com/*", "http://localhost:5000/*"],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
